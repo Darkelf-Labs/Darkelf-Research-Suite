@@ -91,24 +91,6 @@ Example tasks you can perform:
 
 ------------------------------------------------------------------------
 
-## Project Structure (Recommended)
-
-For future improvements, consider restructuring the project:
-
-    darkelf/
-    │
-    ├── cli.py
-    ├── browser.py
-    ├── dns_tools.py
-    ├── tor_manager.py
-    ├── exporter.py
-    ├── research.py
-    └── main.py
-
-This modular layout improves maintainability and readability.
-
-------------------------------------------------------------------------
-
 ## Security Notice
 
 Darkelf Research Suite is intended for:
