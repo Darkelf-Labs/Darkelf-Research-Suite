@@ -1,0 +1,11 @@
+requests
+rich
+beautifulsoup4
+tldextract
+python-whois
+stem
+dnspython
+pyperclip
+pdfkit
+weasyprint
+psutil
