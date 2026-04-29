@@ -95,7 +95,17 @@ Darkelf Research Suite v2.1
 - Quick HTML→PDF (pdfkit)
 """
 
-import os, sys, json, time, textwrap, subprocess, requests, shutil, termios, tty
+import os
+import sys
+import json
+import time
+import textwrap
+import requests
+import shutil
+import termios
+import tty
+
+import subprocess  # nosec B404 - controlled usage, no shell execution
 import re
 import whois
 import tldextract
@@ -114,24 +124,27 @@ import socket
 import time
 from typing import Any, Dict, List, Iterable, Optional
 from weasyprint import HTML  # add this near the top with other imports
+
 try:
     import dns.resolver
     import dns.reversename
+
     DNS_AVAILABLE = True
 except ImportError:
     DNS_AVAILABLE = False
 
 try:
     import whois as python_whois
+
     WHOIS_AVAILABLE = True
 except ImportError:
     WHOIS_AVAILABLE = False
-    
+
 try:
     import psutil  # optional, for RAM detection
 except Exception:
     psutil = None
-    
+
 from typing import Any
 
 from stem.control import Controller
@@ -142,8 +155,10 @@ from pathlib import Path
 OUTPUT_DIR = Path.home() / "Documents" / "Darkelf"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+
 def output_path(filename: str) -> Path:
     return OUTPUT_DIR / filename
+
 
 TOR_PORT = 9052  # detected from tor startup
 ControlPort = 9053
@@ -155,19 +170,21 @@ PROXY = f"socks5h://127.0.0.1:{TOR_PORT}"
 console = Console()
 LOG_PATH = "darkelf_activity.log"
 
+
 def _log(msg: str, level: str = "INFO"):
     line = f"{datetime.utcnow().isoformat()} [{level}] {msg}"
     try:
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write(line + "\n")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] Logging failed: {e}")
     if level == "ERROR":
         console.print(f"[red]{line}[/red]")
     elif level == "WARN":
         console.print(f"[yellow]{line}[/yellow]")
     else:
         console.print(f"[cyan]{line}[/cyan]")
+
 
 # ---------------------------
 # Tor Manager Using Stem
@@ -184,17 +201,24 @@ class TorManager:
         """Launch Tor process and establish a control connection."""
         try:
             self.tor_process = launch_tor_with_config(
-                config={"SOCKSPort": str(self.socks_port), "ControlPort": str(self.control_port)},
+                config={
+                    "SOCKSPort": str(self.socks_port),
+                    "ControlPort": str(self.control_port),
+                },
                 init_msg_handler=self._tor_output_handler,
                 tor_cmd=self.tor_binary,
             )
             self.tor_controller = Controller.from_port(port=self.control_port)
             self.tor_controller.authenticate()
             self.tor_controller.signal(Signal.NEWNYM)
-            console.print(f"[green]Tor started successfully on SOCKSPort {self.socks_port} and ControlPort {self.control_port}[/green]")
+            console.print(
+                f"[green]Tor started successfully on SOCKSPort {self.socks_port} and ControlPort {self.control_port}[/green]"
+            )
         except Exception as e:
             _log(f"Failed to start Tor: {e}", "ERROR")
-            raise RuntimeError("Tor startup failed. Ensure that Tor is installed and accessible.")
+            raise RuntimeError(
+                "Tor startup failed. Ensure that Tor is installed and accessible."
+            )
 
     def new_identity(self):
         """Request a new identity from the Tor network."""
@@ -215,13 +239,18 @@ class TorManager:
     def _tor_output_handler(line):
         _log(line.strip(), level="INFO")
 
+
 # ---------------------------
 # Utility helpers
 # ---------------------------
 EMAIL_RE = re.compile(r"\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[A-Za-z]{2,63}\b")
-HASH_RE = re.compile(r"\b([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{56}|[a-fA-F0-9]{64})\b")
+HASH_RE = re.compile(
+    r"\b([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{56}|[a-fA-F0-9]{64})\b"
+)
 USERNAME_RE = re.compile(r"@([\w\-_]{3,32})")
-IPV4_RE = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d{1,2})\.){3}(?:25[0-5]|2[0-4]\d|1?\d{1,2})\b")
+IPV4_RE = re.compile(
+    r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d{1,2})\.){3}(?:25[0-5]|2[0-4]\d|1?\d{1,2})\b"
+)
 
 
 def normalize_domain(token: str) -> Optional[str]:
@@ -231,8 +260,11 @@ def normalize_domain(token: str) -> Optional[str]:
         return ".".join(parts)
     return None
 
+
 class DuckDuckGoLite:
-    LITE_ONION = "https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/lite"
+    LITE_ONION = (
+        "https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/lite"
+    )
     HTML_CLEARNET = "https://duckduckgo.com/html/"
 
     def __init__(self, use_tor=True, proxies=None):
@@ -244,7 +276,7 @@ class DuckDuckGoLite:
             # Use the same proxy as your TorManager
             self.proxies = {
                 "http": f"socks5h://127.0.0.1:9052",  # Or use tor_manager.socks_port
-                "https": f"socks5h://127.0.0.1:9052"
+                "https": f"socks5h://127.0.0.1:9052",
             }
         else:
             self.proxies = None
@@ -265,29 +297,32 @@ class DuckDuckGoLite:
                         break
         # Add clearnet fallback if desired
         return out
-        
+
+
 class WHOISDNSLookup:
     """
     WHOIS and DNS lookup utility that routes all queries through Tor.
     Provides domain/IP WHOIS, DNS record queries, and reverse DNS lookups.
     """
-    
+
     def __init__(self, use_tor: bool = True, socks_port: int = 9052):
         self.use_tor = use_tor
         self.socks_port = socks_port
-        
+
         # Configure DNS resolver to use Tor if available
         if DNS_AVAILABLE and use_tor:
             self.resolver = dns.resolver.Resolver()
             # Note: dnspython doesn't natively support SOCKS proxies
             # For production, consider using a local DNS forwarder through Tor
-            print("DNS resolver initialized (note: direct Tor routing for DNS may require additional setup)")
+            print(
+                "DNS resolver initialized (note: direct Tor routing for DNS may require additional setup)"
+            )
         elif DNS_AVAILABLE:
             self.resolver = dns.resolver.Resolver()
         else:
             self.resolver = None
             print("dnspython not available - DNS lookups disabled")
-    
+
     def whois_domain(self, domain: str) -> Dict[str, Any]:
         if not WHOIS_AVAILABLE:
             return {"error": "python-whois library not installed"}
@@ -295,26 +330,33 @@ class WHOISDNSLookup:
             w = python_whois.whois(domain)
             result = {
                 "domain": domain,
-                "registrar": w.registrar if hasattr(w, 'registrar') else None,
-                "creation_date": str(w.creation_date) if hasattr(w, 'creation_date') else None,
-                "expiration_date": str(w.expiration_date) if hasattr(w, 'expiration_date') else None,
-                "updated_date": str(w.updated_date) if hasattr(w, 'updated_date') else None,
-                "status": w.status if hasattr(w, 'status') else None,
-                "nameservers": w.name_servers if hasattr(w, 'name_servers') else None,
-                "emails": w.emails if hasattr(w, 'emails') else None,
+                "registrar": w.registrar if hasattr(w, "registrar") else None,
+                "creation_date": (
+                    str(w.creation_date) if hasattr(w, "creation_date") else None
+                ),
+                "expiration_date": (
+                    str(w.expiration_date) if hasattr(w, "expiration_date") else None
+                ),
+                "updated_date": (
+                    str(w.updated_date) if hasattr(w, "updated_date") else None
+                ),
+                "status": w.status if hasattr(w, "status") else None,
+                "nameservers": w.name_servers if hasattr(w, "name_servers") else None,
+                "emails": w.emails if hasattr(w, "emails") else None,
             }
             return result
         except Exception as e:
             return {"error": str(e), "domain": domain}
-    
+
     def whois_ip(self, ip: str) -> Dict[str, Any]:
         try:
             import requests
+
             session = requests.Session()
             if self.use_tor:
                 session.proxies = {
                     "http": f"socks5h://127.0.0.1:{self.socks_port}",
-                    "https": f"socks5h://127.0.0.1:{self.socks_port}"
+                    "https": f"socks5h://127.0.0.1:{self.socks_port}",
                 }
             url = f"https://ipwhois.app/json/{ip}"
             r = session.get(url, timeout=15)
@@ -333,7 +375,7 @@ class WHOISDNSLookup:
             return result
         except Exception as e:
             return {"error": str(e), "ip": ip}
-    
+
     def dns_query(self, domain: str, record_type: str = "A") -> List[Dict[str, Any]]:
         if not DNS_AVAILABLE:
             return [{"error": "dnspython library not installed"}]
@@ -363,7 +405,7 @@ class WHOISDNSLookup:
             return [{"error": f"No {record_type} records found", "domain": domain}]
         except Exception as e:
             return [{"error": str(e), "domain": domain}]
-    
+
     def reverse_dns(self, ip: str) -> Dict[str, Any]:
         if not DNS_AVAILABLE:
             return {"error": "dnspython library not installed"}
@@ -374,11 +416,12 @@ class WHOISDNSLookup:
             return {
                 "ip": ip,
                 "hostnames": hostnames,
-                "ttl": answers.rrset.ttl if answers else None
+                "ttl": answers.rrset.ttl if answers else None,
             }
         except Exception as e:
             return {"error": str(e), "ip": ip}
-            
+
+
 # ================= CONFIG =================
 
 APP_NAME = "Darkelf Research Suite"
@@ -401,6 +444,7 @@ ORIGINAL_TTY = None
 
 # ================= NETWORK =================
 
+
 def create_session():
     session = requests.Session()
     retries = Retry(total=3, backoff_factor=1)
@@ -409,7 +453,9 @@ def create_session():
     session.headers.update({"User-Agent": USER_AGENT})
     return session
 
+
 SESSION = create_session()
+
 
 def safe_get(url, session=None, timeout=12, params=None):
     try:
@@ -421,7 +467,9 @@ def safe_get(url, session=None, timeout=12, params=None):
         console.print(f"[red]Network error:[/red] {e}")
     return None
 
+
 # ================= TTY =================
+
 
 def init_tty():
     global ORIGINAL_TTY
@@ -429,6 +477,7 @@ def init_tty():
         ORIGINAL_TTY = termios.tcgetattr(sys.stdin.fileno())
     except Exception:
         ORIGINAL_TTY = None
+
 
 def read_key():
     fd = sys.stdin.fileno()
@@ -448,17 +497,44 @@ def read_key():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
+
 def clear():
-    os.system("cls" if os.name == "nt" else "clear")
+    try:
+        if os.name == "nt":
+            cmd_path = which("cmd")
+            if not cmd_path:
+                raise RuntimeError("cmd not found")
+            subprocess.run([cmd_path, "/c", "cls"], check=True)  # nosec B603 B607
+        else:
+            clear_path = which("clear")
+            if not clear_path:
+                raise RuntimeError("clear not found")
+            subprocess.run([clear_path], check=True)  # nosec B603 B607
+    except Exception as e:
+        _log(f"Clear screen failed: {e}", "WARN")
+
 
 def press_enter(msg="Press Enter to continue..."):
     input(f"\n{msg}")
 
+
 def is_int(v):
     try:
-        int(v); return True
+        int(v)
+        return True
     except Exception:
         return False
+        
+def create_tab(url=None):
+    return {
+        "url": url,
+        "back": [],
+        "forward": [],
+        "links": [],
+        "scroll": 0,
+        "lines": [],
+        "title": "",
+    }
 
 # ================= PERSISTENT TABS =================
 
@@ -468,15 +544,30 @@ active_tab = 0
 def save_tabs():
     try:
         state = []
+
         for tab in tabs:
+            # Skip corrupted entries
+            if not isinstance(tab, dict):
+                _log(f"Skipping corrupt tab during save: {tab}", "WARN")
+                continue
+
             state.append({
-                "url": tab["url"],
-                "title": tab["title"],
-                "back": tab["back"],
-                "forward": tab["forward"]
+                "url": tab.get("url"),
+                "title": tab.get("title", ""),
+                "back": tab.get("back", []),
+                "forward": tab.get("forward", []),
             })
-        with open(TAB_STATE_FILE, "w") as f:
-            json.dump({"active": active_tab, "tabs": state}, f)
+
+        # Ensure active_tab is valid
+        safe_active = min(active_tab, len(state) - 1) if state else 0
+
+        with open(TAB_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(
+                {"active": safe_active, "tabs": state},
+                f,
+                indent=2
+            )
+
     except Exception as e:
         console.print(f"[yellow]Warning:[/yellow] Could not save tab state: {e}")
 
@@ -489,24 +580,39 @@ def load_tabs():
             data = json.load(f)
             tabs.clear()
             for t in data.get("tabs", []):
-                tab = {
-                    "url": t.get("url"),
-                    "title": t.get("title") or "",
-                    "back": t.get("back", []),
-                    "forward": t.get("forward", []),
-                    "links": [],
-                    "scroll": 0,
-                    "lines": []
-                }
+                if not isinstance(t, dict):
+                    continue
+
+                tab = create_tab()
+                tab["url"] = t.get("url")
+                tab["title"] = t.get("title", "")
+                tab["back"] = t.get("back", [])
+                tab["forward"] = t.get("forward", [])
+
                 tabs.append(tab)
-            active_tab = min(int(data.get("active", 0)), len(tabs)-1) if tabs else 0
+            active_tab = min(int(data.get("active", 0)), len(tabs) - 1) if tabs else 0
     except Exception as e:
         console.print(f"[yellow]Warning:[/yellow] Could not restore tab state: {e}")
 
+
 # ================= MULTI TAB BROWSER =================
 
+
 def current_tab():
-    return tabs[active_tab] if tabs else None
+    if not tabs:
+        return None
+
+    try:
+        tab = tabs[active_tab]
+    except Exception as e:
+        _log(f"Tab index error: {e}", "ERROR")
+        return None
+
+    if not isinstance(tab, dict):
+        _log(f"Corrupt tab detected: {tab}", "ERROR")
+        return None
+
+    return tab
 
 def open_page(url):
     """Preserves original function name for CLI compatibility."""
@@ -515,19 +621,20 @@ def open_page(url):
 
 def new_tab(url=None):
     global active_tab
-    tab = {
-        "url": None,
-        "back": [],
-        "forward": [],
-        "links": [],
-        "scroll": 0,
-        "lines": [],
-        "title": ""
-    }
+
+    # Always use a single source of truth for tab structure
+    tab = create_tab(url)
+
     tabs.append(tab)
     active_tab = len(tabs) - 1
-    if url:
-        load_page(url)
+
+    # Only load if URL is valid/non-empty
+    if url and isinstance(url, str) and url.strip():
+        try:
+            load_page(url)
+        except Exception as e:
+            _log(f"Failed to load page in new tab: {e}", "WARN")
+
 
 def close_tab():
     global active_tab
@@ -537,10 +644,12 @@ def close_tab():
     if tabs:
         active_tab = max(0, active_tab - 1)
 
+
 def switch_tab(index):
     global active_tab
     if 0 <= index < len(tabs):
         active_tab = index
+
 
 def load_page(url, add_history=True):
     tab = current_tab()
@@ -580,14 +689,10 @@ def load_page(url, add_history=True):
         if href.startswith("http"):
             links.append((a.get_text(" ", strip=True), href))
 
-    tab.update({
-        "url": url,
-        "lines": lines,
-        "links": links,
-        "scroll": 0
-    })
+    tab.update({"url": url, "lines": lines, "links": links, "scroll": 0})
 
     render_page()
+
 
 def render_page():
     clear()
@@ -601,11 +706,13 @@ def render_page():
 
     visible = "\n".join(tab["lines"][start:end])
 
-    console.print(Panel(
-        visible or "[dim]No readable content[/dim]",
-        title=f"[Tab {active_tab+1}/{len(tabs)}] {tab['title']}\n{tab['url']}",
-        border_style="green"
-    ))
+    console.print(
+        Panel(
+            visible or "[dim]No readable content[/dim]",
+            title=f"[Tab {active_tab+1}/{len(tabs)}] {tab['title']}\n{tab['url']}",
+            border_style="green",
+        )
+    )
 
     if tab["links"]:
         table = Table(title="Links (1-9)", show_lines=True)
@@ -619,8 +726,9 @@ def render_page():
         "[w/←]Back [s/→]Forward [j/↓]Down [k/↑]Up "
         "[t]NewTab [x]CloseTab [n]Next [p]Prev "
         "[b]Bookmark [B]Bookmarks [c]CopyURL [P]Save PDF [q]Quit",
-        style="green"
+        style="green",
     )
+
 
 def browser_loop():
     while True:
@@ -675,7 +783,7 @@ def browser_loop():
                 load_page(tab["links"][i][1])
 
         elif k == "b":
-            add_bookmark(tab["url"], tab['title'])
+            add_bookmark(tab["url"], tab["title"])
             console.print("[green]Bookmarked![/green]")
             press_enter()
             render_page()
@@ -691,7 +799,9 @@ def browser_loop():
             save_pdf(tab["url"])
             render_page()
 
+
 # ================= BOOKMARKS =================
+
 
 def add_bookmark(url, title=None):
     bookmarks = []
@@ -702,6 +812,7 @@ def add_bookmark(url, title=None):
     with open(BOOKMARKS_FILE, "w") as f:
         json.dump(bookmarks[-100:], f, indent=2)
     console.print(f"[green]Bookmarked {url}[/green]")
+
 
 def show_bookmarks():
     if not os.path.exists(BOOKMARKS_FILE):
@@ -720,7 +831,9 @@ def show_bookmarks():
     if is_int(i) and 0 < int(i) <= len(bookmarks):
         open_page(bookmarks[int(i) - 1]["url"])
 
+
 # ================= PDF SNAPSHOT =================
+
 
 def save_pdf(url):
     fname = os.path.join(BASE_DIR, f"snapshot_{int(time.time())}.pdf")
@@ -731,12 +844,16 @@ def save_pdf(url):
         console.print(f"[red]PDF failed:[/red] {e}")
     press_enter()
 
+
 # ================= SEARCH =================
+
 
 class WebSearch:
     def __init__(self):
         self.session = create_session()
-        self.history = json.load(open(HISTORY_FILE)) if os.path.exists(HISTORY_FILE) else []
+        self.history = (
+            json.load(open(HISTORY_FILE)) if os.path.exists(HISTORY_FILE) else []
+        )
 
     def save(self):
         json.dump(self.history[-200:], open(HISTORY_FILE, "w"), indent=2)
@@ -759,40 +876,50 @@ class WebSearch:
                 url = requests.utils.unquote(a["href"].split("uddg=")[1].split("&")[0])
                 title = a.get_text(" ", strip=True)
                 results.append((title, url))
-            except Exception:
-                pass
+            except Exception as e:
+                _log(f"Search parse error: {e}", "WARN")
             if len(results) >= limit:
                 break
         return results
 
+
 # ================= ARCHIVE =================
+
 
 class InternetArchive:
     def search(self, q):
-        r = safe_get(IA_ADV_SEARCH, params={
-            "q": q,
-            "rows": 10,
-            "output": "json"
-        })
+        r = safe_get(IA_ADV_SEARCH, params={"q": q, "rows": 10, "output": "json"})
         return r.json() if r else {}
 
-# ================= AI =================
 
+# ================= AI =================
 class DarkelfResearchAI:
+    ALLOWED_MODELS = {"mistral", "llama3", "phi", "gemma"}  # adjust as needed
+    MAX_PROMPT_LEN = 8000
+
     def __init__(self, model="mistral"):
-        if not which("ollama"):
-            console.print("[red]Ollama not installed[/red]")
+        self.ollama_path = which("ollama")
+        if not self.ollama_path:
+            console.print("[red]Ollama not installed or not in PATH[/red]")
             sys.exit(1)
+
+        # Strict model validation (stronger than regex alone)
+        if model not in self.ALLOWED_MODELS:
+            raise ValueError(f"Model '{model}' not allowed")
+
         self.model = model
 
-    def ask(self, prompt):
-        proc = subprocess.Popen(
-            ["ollama", "run", self.model],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            text=True
-        )
-        proc.stdin.write(
+    def ask(self, prompt, timeout=60):
+        if not isinstance(prompt, str) or not prompt.strip():
+            console.print("[yellow]Empty or invalid prompt[/yellow]")
+            return
+
+        # Prevent abuse / memory blowups
+        if len(prompt) > self.MAX_PROMPT_LEN:
+            console.print("[yellow]Prompt too long, truncating[/yellow]")
+            prompt = prompt[: self.MAX_PROMPT_LEN]
+
+        system_prompt = (
             "You are Darkelf Research AI.\n"
             "You perform structured OSINT analysis.\n"
             "You provide:\n"
@@ -803,12 +930,73 @@ class DarkelfResearchAI:
             "- Metadata strategies\n\n"
             f"User query:\n{prompt}\n"
         )
-        proc.stdin.close()
 
-        for line in proc.stdout:
-            print(line, end="", flush=True)
+        proc = None
+
+        try:
+            proc = subprocess.Popen(
+                [
+                    self.ollama_path,
+                    "run",
+                    self.model,
+                ],  # nosec B603 - validated input, no shell
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+
+            # --- Send input safely ---
+            try:
+                proc.stdin.write(system_prompt)
+                proc.stdin.close()
+            except Exception as e:
+                _log(f"stdin write failed: {e}", "ERROR")
+                proc.kill()
+                return
+
+            # --- Stream output safely ---
+            try:
+                for line in iter(proc.stdout.readline, ""):
+                    print(line, end="", flush=True)
+            except Exception as e:
+                _log(f"stdout stream error: {e}", "WARN")
+
+            # --- Wait with timeout ---
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                console.print("[red]AI process timed out[/red]")
+                return
+
+            # --- Handle errors ---
+            if proc.returncode != 0:
+                try:
+                    err = proc.stderr.read()
+                except Exception:
+                    err = "Unknown error"
+                console.print(f"[red]AI error:[/red] {err}")
+
+        except Exception as e:
+            _log(f"AI execution failed: {e}", "ERROR")
+            console.print("[red]Failed to run AI process[/red]")
+
+        finally:
+            # Ensure cleanup (important)
+            if proc:
+                try:
+                    if proc.stdout:
+                        proc.stdout.close()
+                    if proc.stderr:
+                        proc.stderr.close()
+                except Exception as e:
+                    _log(f"Cleanup error: {e}", "WARN")
+
 
 # ================= MENU =================
+
 
 def main_menu():
     table = Table(title=f"{APP_NAME} v{APP_VERSION}", show_lines=True)
@@ -833,13 +1021,18 @@ def main_menu():
     table.add_row("16", "Wipe History/Cache/Cookies")
     table.add_row("0", "Exit")
 
-    console.print(Panel.fit(
-        "🔍 OSINT & Research Terminal\n🌐 Clearnet + Manual Darkweb\n🤖 Darkelf Research AI",
-        border_style="green"
-    ))
+    console.print(
+        Panel.fit(
+            "🔍 OSINT & Research Terminal\n🌐 Clearnet + Manual Darkweb\n🤖 Darkelf Research AI",
+            border_style="green",
+        )
+    )
     console.print(table)
+
+
 # ================= APP =================
-                
+
+
 class DarkelfCLI:
     def __init__(self):
         self.search = WebSearch()
@@ -852,18 +1045,17 @@ class DarkelfCLI:
         except Exception:
             self.tor_enabled = False
         self.whois_dns = WHOISDNSLookup(
-            use_tor=self.tor_enabled,
-            socks_port=self.tor_manager.socks_port
+            use_tor=self.tor_enabled, socks_port=self.tor_manager.socks_port
         )
-        
+
     def tor_session(self):
         s = requests.Session()
         s.proxies = {
             "http": f"socks5h://127.0.0.1:{self.tor_manager.socks_port}",
-            "https": f"socks5h://127.0.0.1:{self.tor_manager.socks_port}"
+            "https": f"socks5h://127.0.0.1:{self.tor_manager.socks_port}",
         }
         return s
-        
+
     def run(self):
         init_tty()
         load_tabs()
@@ -922,7 +1114,7 @@ class DarkelfCLI:
                     console.print(t)
                     sel = input("Open #> ")
                     if is_int(sel) and 0 < int(sel) <= len(docs):
-                        ident = docs[int(sel)-1].get("identifier")
+                        ident = docs[int(sel) - 1].get("identifier")
                         if ident:
                             open_page(f"https://archive.org/details/{ident}")
 
@@ -931,8 +1123,10 @@ class DarkelfCLI:
 
                 if c == "5":
                     for h in self.search.history[-20:]:
-                        print(time.strftime("%Y-%m-%d %H:%M:%S",
-                              time.localtime(h["ts"])), h["q"])
+                        print(
+                            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(h["ts"])),
+                            h["q"],
+                        )
                     press_enter()
 
                 if c == "6":
@@ -964,12 +1158,12 @@ class DarkelfCLI:
                     tab = current_tab()
                     if tab and tab["url"]:
                         save_pdf(tab["url"])
-                        
+
                 if c == "14":
                     self.tor_manager.new_identity()
                     print("[green]Tor identity changed.[/green]")
                     press_enter()
-                    
+
                 if c == "15":
                     if self.tor_enabled:
                         try:
@@ -981,19 +1175,19 @@ class DarkelfCLI:
                     else:
                         console.print("[dim]Tor is not currently running.[/dim]")
                     press_enter()
-                    
+
                 if c == "16":
                     self.wipe_cache_history()
-                    
+
         finally:
             save_tabs()
             try:
                 self.tor_manager.stop_tor()
-            except Exception:
-                pass
-                
+            except Exception as e:
+                _log(f"Tor shutdown error: {e}", "WARN")
+
     def whois_lookup(self):
-    
+
         while True:
             console.print("[cyan]WHOIS / DNS lookup menu[/cyan]")
             console.print(" [1] Domain WHOIS")
@@ -1043,7 +1237,9 @@ class DarkelfCLI:
 
             elif c == "3":
                 domain = input("Domain> ").strip()
-                record_type = input("Record type (A, MX, TXT, NS, etc)> ").strip().upper() or "A"
+                record_type = (
+                    input("Record type (A, MX, TXT, NS, etc)> ").strip().upper() or "A"
+                )
                 results = self.whois_dns.dns_query(domain, record_type)
                 for r in results:
                     print(r)
@@ -1057,7 +1253,7 @@ class DarkelfCLI:
 
             elif c == "5":
                 break
-                
+
     def wipe_cache_history(self):
         errors = []
         removed = []
@@ -1067,8 +1263,10 @@ class DarkelfCLI:
             HISTORY_FILE,
             TAB_STATE_FILE,
             BOOKMARKS_FILE,
-            os.path.join(BASE_DIR, "cookies.json"),          # If you serialize cookies yourself
-            os.path.join(BASE_DIR, "requests_session.pkl"),  # Example: if you pickle session state
+            os.path.join(BASE_DIR, "cookies.json"),  # If you serialize cookies yourself
+            os.path.join(
+                BASE_DIR, "requests_session.pkl"
+            ),  # Example: if you pickle session state
             # Add other session/cache/cookie files here
         ]
         for file in files_to_remove:
@@ -1082,16 +1280,16 @@ class DarkelfCLI:
         # If you use sessions with persistent cookies, clear them from memory too
         try:
             requests.Session().cookies.clear()
-        except Exception:
-            pass
+        except Exception as e:
+            _log(f"Cookie clear failed: {e}", "WARN")
 
         # Also clear in-memory search object history
         try:
             if hasattr(self.search, "history"):
                 self.search.history.clear()
                 self.search.save()
-        except Exception:
-            pass
+        except Exception as e:
+            _log(f"Search save failed: {e}", "WARN")
 
         if removed:
             console.print(f"[green]Wiped/removed:[/green]\n" + "\n".join(removed))
@@ -1101,7 +1299,7 @@ class DarkelfCLI:
         if errors:
             console.print(f"[red]Errors encountered:[/red]\n" + "\n".join(errors))
         press_enter()
-        
+
     def header_inspector(self):
         url = input("URL> ").strip()
         r = safe_get(url)
@@ -1184,16 +1382,15 @@ class DarkelfCLI:
                 console.print("[yellow]Large response truncated for display.[/yellow]")
                 content = content[:5000]
 
-            console.print(Panel(
-                content,
-                title=f"[Onion] {url}",
-                border_style="magenta"
-            ))
+            console.print(
+                Panel(content, title=f"[Onion] {url}", border_style="magenta")
+            )
 
         except Exception as e:
             console.print(f"[red]Onion access error:[/red] {e}")
 
         press_enter()
+
 
 # ================= ENTRY =================
 
