@@ -85,7 +85,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Darkelf Research Suite v2.1
+Darkelf Research Suite v2.2
 - All original logic preserved.
 - Multi-tab browser (non-recursive)
 - Persistent tabs across sessions
@@ -120,6 +120,7 @@ import pdfkit
 from requests.exceptions import RequestException, ReadTimeout
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from urllib.parse import urlparse
 import socket
 import time
 from typing import Any, Dict, List, Iterable, Optional
@@ -535,7 +536,143 @@ def create_tab(url=None):
         "lines": [],
         "title": "",
     }
+    
+def terminal_size():
+    return shutil.get_terminal_size((120, 30))
 
+
+def wrap_text_block(text, width):
+    if not text:
+        return []
+    wrapped = textwrap.fill(
+        text,
+        width=max(20, width),
+        replace_whitespace=True,
+        drop_whitespace=True,
+    )
+    return wrapped.splitlines()
+
+
+def clean_text(text):
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def unique_preserve(seq):
+    seen = set()
+    out = []
+    for item in seq:
+        key = item if isinstance(item, str) else repr(item)
+        if key not in seen:
+            seen.add(key)
+            out.append(item)
+    return out
+
+
+def extract_readable_content(soup, url):
+    """
+    Build a much richer readable text view than just long <p> tags.
+    """
+    for tag in soup(["script", "style", "noscript", "svg", "img", "footer", "nav"]):
+        tag.decompose()
+
+    chunks = []
+
+    title = clean_text(soup.title.get_text(" ", strip=True) if soup.title else "")
+    if title:
+        chunks.append(f"# {title}")
+
+    meta_desc = soup.find("meta", attrs={"name": "description"})
+    if meta_desc and meta_desc.get("content"):
+        desc = clean_text(meta_desc.get("content"))
+        if desc:
+            chunks.append(f"Description: {desc}")
+
+    og_desc = soup.find("meta", attrs={"property": "og:description"})
+    if og_desc and og_desc.get("content"):
+        desc = clean_text(og_desc.get("content"))
+        if desc:
+            chunks.append(f"OG Description: {desc}")
+
+    selectors = [
+        "main",
+        "article",
+        "[role='main']",
+        ".markdown-body",
+        ".repository-content",
+        ".application-main",
+        ".Box-body",
+        "body",
+    ]
+
+    root = None
+    for sel in selectors:
+        root = soup.select_one(sel)
+        if root:
+            break
+    if root is None:
+        root = soup
+
+    for elem in root.find_all(
+        ["h1", "h2", "h3", "h4", "p", "li", "pre", "code", "blockquote", "td", "th"]
+    ):
+        txt = clean_text(elem.get_text(" ", strip=True))
+        if not txt:
+            continue
+
+        name = elem.name.lower()
+        if name in {"h1", "h2", "h3", "h4"}:
+            chunks.append(f"\n{name.upper()}: {txt}")
+        elif name == "li":
+            chunks.append(f"• {txt}")
+        elif name in {"pre", "code"}:
+            chunks.append(f"[code] {txt}")
+        elif name == "blockquote":
+            chunks.append(f"> {txt}")
+        else:
+            chunks.append(txt)
+
+    chunks = [c for c in unique_preserve(chunks) if len(c.strip()) > 0]
+
+    if not chunks:
+        body_text = clean_text(root.get_text(" ", strip=True))
+        if body_text:
+            chunks.append(body_text)
+
+    return chunks
+
+
+def extract_links_detailed(soup, base_url, limit=50):
+    links = []
+    for a in soup.find_all("a", href=True):
+        href = clean_text(a.get("href"))
+        text = clean_text(a.get_text(" ", strip=True)) or "(link)"
+        if not href:
+            continue
+
+        href = requests.compat.urljoin(base_url, href)
+
+        if href.startswith("http://") or href.startswith("https://"):
+            parsed = urlparse(href)
+            links.append({
+                "text": text,
+                "url": href,
+                "domain": parsed.netloc,
+                "path": parsed.path or "/",
+            })
+
+    deduped = []
+    seen = set()
+    for link in links:
+        key = (link["text"], link["url"])
+        if key not in seen:
+            seen.add(key)
+            deduped.append(link)
+
+    return deduped[:limit]
+    
 # ================= PERSISTENT TABS =================
 
 tabs = []
@@ -667,29 +804,36 @@ def load_page(url, add_history=True):
     soup = BeautifulSoup(r.text, "html.parser")
     tab["title"] = soup.title.get_text(strip=True) if soup.title else url
 
-    paragraphs = [
-        p.get_text(" ", strip=True)
-        for p in soup.find_all("p")
-        if len(p.get_text(strip=True)) > 80
-    ]
+    size = terminal_size()
+    width = max(40, size.columns - 8)
 
-    width = shutil.get_terminal_size((100, 20)).columns - 6
+    content_chunks = extract_readable_content(soup, url)
     lines = []
 
-    for p in paragraphs:
-        wrapped = textwrap.fill(p, width)
-        lines.extend(wrapped.split("\n"))
+    for chunk in content_chunks:
+        if chunk.startswith("\n"):
+            lines.append("")
+            chunk = chunk.strip()
+
+        if chunk.startswith("H1:") or chunk.startswith("H2:") or chunk.startswith("H3:") or chunk.startswith("H4:"):
+            lines.append(chunk)
+            lines.append("")
+            continue
+
+        wrapped = wrap_text_block(chunk, width)
+        lines.extend(wrapped)
         lines.append("")
 
-    links = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if href.startswith("/"):
-            href = requests.compat.urljoin(url, href)
-        if href.startswith("http"):
-            links.append((a.get_text(" ", strip=True), href))
+    links = extract_links_detailed(soup, url, limit=100)
 
-    tab.update({"url": url, "lines": lines, "links": links, "scroll": 0})
+    tab.update(
+        {
+            "url": url,
+            "lines": lines,
+            "links": links,
+            "scroll": 0,
+        }
+    )
 
     render_page()
 
@@ -700,35 +844,48 @@ def render_page():
     if not tab:
         return
 
-    height = shutil.get_terminal_size((100, 20)).lines - 11
+    size = terminal_size()
+    body_height = max(8, size.lines - 16)
     start = tab["scroll"]
-    end = start + height
+    end = start + body_height
 
     visible = "\n".join(tab["lines"][start:end])
 
+    title = f"[Tab {active_tab+1}/{len(tabs)}] {tab.get('title','')}"
+    subtitle = tab.get("url", "")
+
     console.print(
         Panel(
-            visible or "[dim]No readable content[/dim]",
-            title=f"[Tab {active_tab+1}/{len(tabs)}] {tab['title']}\n{tab['url']}",
+            visible or "[dim]No readable content extracted[/dim]",
+            title=title,
+            subtitle=subtitle,
             border_style="green",
+            expand=True,
         )
     )
 
     if tab["links"]:
-        table = Table(title="Links (1-9)", show_lines=True)
-        table.add_column("#", width=3)
-        table.add_column("Text")
-        for i, (t, _) in enumerate(tab["links"][:9], 1):
-            table.add_row(str(i), t[:60] or "(link)")
+        table = Table(title=f"Links ({min(len(tab['links']), 12)} shown / {len(tab['links'])} total)", show_lines=True, expand=True)
+        table.add_column("#", width=4, no_wrap=True)
+        table.add_column("Text", ratio=3, overflow="fold")
+        table.add_column("Domain", ratio=2, overflow="fold")
+        table.add_column("Path", ratio=3, overflow="fold")
+
+        for i, link in enumerate(tab["links"][:12], 1):
+            table.add_row(
+                str(i),
+                link["text"],
+                link["domain"],
+                link["path"],
+            )
         console.print(table)
 
     console.print(
         "[w/←]Back [s/→]Forward [j/↓]Down [k/↑]Up "
         "[t]NewTab [x]CloseTab [n]Next [p]Prev "
-        "[b]Bookmark [B]Bookmarks [c]CopyURL [P]Save PDF [q]Quit",
+        "[b]Bookmark [B]Bookmarks [c]CopyURL [P]Save PDF [o]OpenLinkURL [q]Quit",
         style="green",
     )
-
 
 def browser_loop():
     while True:
@@ -780,7 +937,17 @@ def browser_loop():
         elif k.isdigit():
             i = int(k) - 1
             if 0 <= i < len(tab["links"]):
-                load_page(tab["links"][i][1])
+                load_page(tab["links"][i]["url"])
+
+        elif k.lower() == "o":
+            sel = input("\nOpen link # or paste URL> ").strip()
+            if is_int(sel):
+                i = int(sel) - 1
+                if 0 <= i < len(tab["links"]):
+                    load_page(tab["links"][i]["url"])
+                    
+            elif sel.startswith("http://") or sel.startswith("https://"):
+                load_page(sel)
 
         elif k == "b":
             add_bookmark(tab["url"], tab["title"])
@@ -1076,13 +1243,15 @@ class DarkelfCLI:
                         press_enter("No results.")
                         continue
 
-                    t = Table(title=f"Results: {q}", show_lines=True)
-                    t.add_column("#", width=3)
-                    t.add_column("Title")
-                    t.add_column("URL", style="dim")
+                    t = Table(title=f"Results: {q}", show_lines=True, expand=True)
+                    t.add_column("#", width=4, no_wrap=True)
+                    t.add_column("Title", ratio=3, overflow="fold")
+                    t.add_column("Domain", ratio=2, overflow="fold")
+                    t.add_column("URL", ratio=4, overflow="fold", style="dim")
 
                     for i, (ti, u) in enumerate(results, 1):
-                        t.add_row(str(i), ti[:70], u[:80])
+                        parsed = urlparse(u)
+                        t.add_row(str(i), ti, parsed.netloc, u)
 
                     console.print(t)
                     sel = input("Open #> ")
@@ -1396,3 +1565,4 @@ class DarkelfCLI:
 
 if __name__ == "__main__":
     DarkelfCLI().run()
+
