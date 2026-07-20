@@ -10,7 +10,7 @@
  include = ["darkelf_research_suite*"]
 
  [project]
- name = "darkelf-research-suite"
+ name = "darkelf-research"
  version = "2.3.0"
  description = "Privacy-focused CLI research and OSINT toolkit with optional Tor, AI, Internet Archive, WHOIS, DNS, and DuckDuckGo integration."
 
