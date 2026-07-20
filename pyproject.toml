@@ -11,7 +11,7 @@
 
  [project]
  name = "darkelf-research"
- version = "2.3.0"
+ version = "2.3.1"
  description = "Privacy-focused CLI research and OSINT toolkit with optional Tor, AI, Internet Archive, WHOIS, DNS, and DuckDuckGo integration."
 
  readme = "README.md"
