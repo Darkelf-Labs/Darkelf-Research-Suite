@@ -1,130 +1,202 @@
-# Darkelf Research Suite
+# 🔍 Darkelf Research Suite
 
-Darkelf Research Suite is a powerful command‑line research toolkit
-designed for advanced web investigation, OSINT workflows, and domain
-analysis.\
-It combines networking tools, HTML parsing, Tor integration, DNS
-inspection, and export utilities into a single interactive CLI
-environment.
+**Privacy-Focused CLI Research & OSINT Toolkit**
 
-------------------------------------------------------------------------
+Darkelf Research Suite is a modern command-line research environment designed for investigators, security professionals, students, and OSINT practitioners. It combines web research, domain intelligence, Tor integration, Internet Archive access, AI-assisted analysis, and browser utilities into a single cross-platform terminal application.
+
+---
 
 ## Features
 
--   **Advanced HTTP Requests**
-    -   Robust requests with retry logic
-    -   Error handling and timeout protection
--   **Domain & Website Analysis**
-    -   WHOIS lookups
-    -   TLD extraction
-    -   DNS resolution and inspection
--   **HTML Parsing**
-    -   Extract structured content from web pages
-    -   Parse and analyze page elements
--   **Tor Integration**
-    -   Launch Tor sessions
-    -   Route research traffic through the Tor network
--   **Rich Terminal UI**
-    -   Interactive CLI interface using the `rich` library
-    -   Tables, panels, and improved readability
--   **Export Capabilities**
-    -   Export pages to PDF
-    -   Save structured research results
--   **Clipboard Integration**
-    -   Copy extracted data directly to the clipboard
--   **Session Management**
-    -   Tabs and bookmarks for persistent research sessions
+- 🌐 DuckDuckGo Lite web search
+- 🧅 Optional Tor network integration
+- 🔒 Isolated Tor data directory
+- 🤖 Optional Ollama AI research assistant
+- 📚 Internet Archive search
+- 🌍 WHOIS domain lookup
+- 🌐 DNS record inspection
+- 🔁 Reverse DNS lookup
+- 📄 Save webpages as PDF
+- 📑 HTML page snapshots
+- 📂 Multi-tab terminal browser
+- 🔖 Persistent bookmarks
+- 📜 Search history
+- 🛡️ HTTP header inspection
+- 🧹 Cache, history, and session cleanup
+- 🖥️ Cross-platform support (Windows, macOS, Linux)
 
-------------------------------------------------------------------------
+---
 
 ## Installation
 
-### 1. Clone the Repository
+### Install from PyPI
 
-``` bash
-git clone https://github.com/yourusername/darkelf-research-suite.git
-cd darkelf-research-suite
+```bash
+pip install darkelf-research-suite
 ```
 
-### 2. Install Dependencies
+Launch:
 
-``` bash
-pip install -r requirements.txt
+```bash
+darkelf-research
 ```
 
-------------------------------------------------------------------------
+or
 
-## Requirements
-
-Create a `requirements.txt` file with:
-
-    requests
-    rich
-    beautifulsoup4
-    tldextract
-    python-whois
-    stem
-    dnspython
-    pyperclip
-    pdfkit
-    weasyprint
-    psutil
-
-------------------------------------------------------------------------
-
-## Usage
-
-Run the main script:
-
-``` bash
-python Darkelf_Research_Suite_v1_8_FINAL.py
+```bash
+python -m darkelf_research_suite
 ```
 
-Example tasks you can perform:
+---
 
--   Investigate a domain
--   Inspect DNS records
--   Fetch and parse web pages
--   Route requests through Tor
--   Export pages to PDF
--   Save bookmarks for research sessions
+## Optional Components
 
-------------------------------------------------------------------------
+Certain features require optional software.
+
+### Tor
+
+Tor is only required for Onion browsing and anonymous routing.
+
+Install Tor:
+
+- macOS (Homebrew)
+
+```bash
+brew install tor
+```
+
+- Ubuntu
+
+```bash
+sudo apt install tor
+```
+
+- Windows
+
+Install the official Tor Expert Bundle or Tor Browser.
+
+If Tor is unavailable, Darkelf Research Suite continues operating normally with Onion features disabled.
+
+---
+
+### Ollama AI
+
+AI-assisted research requires Ollama.
+
+Install from:
+
+https://ollama.com
+
+Example:
+
+```bash
+ollama pull mistral
+```
+
+If Ollama is not installed, all other functionality remains available.
+
+---
+
+## Main Menu
+
+Darkelf Research Suite includes:
+
+- Web OSINT Search
+- AI Research Assistant
+- Internet Archive Research
+- Multi-tab Browser
+- Search History
+- HTTP Header Inspector
+- WHOIS Lookup
+- DNS Lookup
+- Reverse DNS
+- Onion Browser
+- Bookmarks
+- User-Agent Switching
+- PDF Export
+- Tor Identity Rotation
+- Tor Management
+- Cache & History Wipe
+
+---
+
+## Privacy
+
+Darkelf Research Suite is designed with privacy in mind.
+
+- No telemetry
+- No analytics
+- No cloud account required
+- Tor support is optional
+- AI is optional
+- Local bookmark storage
+- Local search history
+- User-controlled data
+
+---
+
+## Supported Platforms
+
+- macOS
+- Linux
+- Windows
+
+Python 3.11+
+
+---
+
+## Dependencies
+
+Core dependencies include:
+
+- requests
+- beautifulsoup4
+- rich
+- stem
+- dnspython
+- python-whois
+- tldextract
+- weasyprint
+- pdfkit
+- pyperclip
+
+Optional:
+
+- Tor
+- Ollama
+
+---
 
 ## Security Notice
 
 Darkelf Research Suite is intended for:
 
--   security research
--   OSINT investigation
--   educational purposes
+- Open Source Intelligence (OSINT)
+- Security research
+- Digital investigations
+- Educational purposes
+- Defensive cybersecurity
 
-Always ensure you follow local laws and ethical guidelines when
-performing network investigations.
+Users are responsible for ensuring they have authorization before investigating systems, services, or data.
 
-------------------------------------------------------------------------
-
-## Roadmap
-
-Possible future improvements:
-
--   Modular architecture
--   Plugin support
--   Async networking
--   Integrated search APIs
--   Headless browser support
-
-------------------------------------------------------------------------
+---
 
 ## License
 
-LGPL License
+Licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0-or-later).
 
-You are free to use, modify, and distribute this software.
+See the LICENSE.md file for details.
 
-------------------------------------------------------------------------
+---
 
 ## Author
 
-Darkelf Research Suite\
-Open‑source research toolkit for advanced CLI investigations.
+**Dr. Kevin Moore**
+
+Creator and Lead Developer of the Darkelf Project
+
+---
+
+## Disclaimer
+
+Darkelf Research Suite is provided "as is" without warranty of any kind. The authors assume no liability for misuse, damages, or violations of applicable laws resulting from use of this software.
