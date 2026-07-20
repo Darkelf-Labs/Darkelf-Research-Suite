@@ -107,7 +107,6 @@ import tty
 
 import subprocess  # nosec B404 - controlled usage, no shell execution
 import re
-import whois
 import tldextract
 from shutil import which
 from bs4 import BeautifulSoup
@@ -116,14 +115,11 @@ from rich.panel import Panel
 from rich.table import Table
 from datetime import datetime
 import pyperclip
-import pdfkit
 from requests.exceptions import RequestException, ReadTimeout
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from urllib.parse import urlparse
-import socket
-import time
-from typing import Any, Dict, List, Iterable, Optional
+from typing import Any, Dict, List, Optional
 from weasyprint import HTML  # add this near the top with other imports
 
 try:
@@ -146,7 +142,6 @@ try:
 except Exception:
     psutil = None
 
-from typing import Any
 
 from stem.control import Controller
 from stem.process import launch_tor_with_config
@@ -300,8 +295,8 @@ class DuckDuckGoLite:
         elif use_tor:
             # Use the same proxy as your TorManager
             self.proxies = {
-                "http": f"socks5h://127.0.0.1:9052",  # Or use tor_manager.socks_port
-                "https": f"socks5h://127.0.0.1:9052",
+                "http": "socks5h://127.0.0.1:9052",  # Or use tor_manager.socks_port
+                "https": "socks5h://127.0.0.1:9052",
             }
         else:
             self.proxies = None
@@ -889,7 +884,14 @@ def render_page():
     )
 
     if tab["links"]:
-        table = Table(title=f"Links ({min(len(tab['links']), 12)} shown / {len(tab['links'])} total)", show_lines=True, expand=True)
+        table = Table(
+            title=(
+                f"Links ({min(len(tab['links']), 12)} shown / "
+                f"{len(tab['links'])} total)"
+            ),
+            show_lines=True,
+            expand=True,
+        )
         table.add_column("#", width=4, no_wrap=True)
         table.add_column("Text", ratio=3, overflow="fold")
         table.add_column("Domain", ratio=2, overflow="fold")
@@ -1537,12 +1539,12 @@ class DarkelfCLI:
             _log(f"Search save failed: {e}", "WARN")
 
         if removed:
-            console.print(f"[green]Wiped/removed:[/green]\n" + "\n".join(removed))
+            console.print("[green]Wiped/removed:[/green]\n" + "\n".join(removed))
         else:
             console.print("[yellow]No cache/history/cookies files found.[/yellow]")
 
         if errors:
-            console.print(f"[red]Errors encountered:[/red]\n" + "\n".join(errors))
+            console.print("[red]Errors encountered:[/red]\n" + "\n".join(errors))
         press_enter()
 
     def header_inspector(self):
@@ -1570,8 +1572,8 @@ class DarkelfCLI:
         soup = BeautifulSoup(r.text, "html.parser")
         links = [a["href"] for a in soup.find_all("a", href=True)]
 
-        for l in links:
-            console.print(l)
+        for link in links:
+            console.print(link)
 
         press_enter()
 
@@ -1649,4 +1651,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
