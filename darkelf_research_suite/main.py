@@ -445,7 +445,7 @@ class WHOISDNSLookup:
 # ================= CONFIG =================
 
 APP_NAME = "Darkelf Research Suite"
-APP_VERSION = "2.1"
+APP_VERSION = "2.3.2"
 
 DDG_LITE = "https://lite.duckduckgo.com/lite/?q="
 IA_ADV_SEARCH = "https://archive.org/advancedsearch.php"
